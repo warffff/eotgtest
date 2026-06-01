@@ -1,0 +1,66 @@
+const crypto = require('crypto');
+
+const EDIT_ROLES = ['1510616159144247411','1510616159144247413','1510616159156834353','1510616159156834352'];
+const GUILD_ID = process.env.DISCORD_GUILD_ID || '1510616159110828062';
+const COOKIE_NAME = 'eotf_session';
+
+function base64url(input){
+  return Buffer.from(input).toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+}
+function unbase64url(input){
+  input = input.replace(/-/g,'+').replace(/_/g,'/');
+  while (input.length % 4) input += '=';
+  return Buffer.from(input,'base64').toString();
+}
+function sign(payload){
+  const secret = process.env.SESSION_SECRET || 'CHANGE_ME_SESSION_SECRET';
+  return crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+}
+function makeSession(data){
+  const payload = base64url(JSON.stringify({...data, exp: Date.now()+1000*60*60*24*14}));
+  return `${payload}.${sign(payload)}`;
+}
+function readCookie(req, name){
+  const cookie = req.headers.cookie || '';
+  const found = cookie.split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='));
+  return found ? decodeURIComponent(found.slice(name.length+1)) : '';
+}
+function readSession(req){
+  const raw = readCookie(req, COOKIE_NAME);
+  if (!raw || !raw.includes('.')) return null;
+  const [payload, sig] = raw.split('.');
+  if (sig !== sign(payload)) return null;
+  try {
+    const data = JSON.parse(unbase64url(payload));
+    if (!data.exp || Date.now() > data.exp) return null;
+    return data;
+  } catch { return null; }
+}
+function setSessionCookie(res, data){
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${COOKIE_NAME}=${encodeURIComponent(makeSession(data))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60*60*24*14}${secure}`);
+}
+function clearSessionCookie(res){
+  res.setHeader('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+function canEditFromRoles(roles=[]){ return roles.some(r => EDIT_ROLES.includes(String(r))); }
+function avatarUrl(user){
+  if (!user || !user.avatar) return null;
+  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`;
+}
+function getBaseUrl(req){
+  if (process.env.PUBLIC_SITE_URL) return process.env.PUBLIC_SITE_URL.replace(/\/$/,'');
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const host = req.headers.host;
+  return `${proto}://${host}`;
+}
+function sendJson(res, status, body){
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.end(JSON.stringify(body));
+}
+function truncate(text, max=950){
+  text = String(text || '').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+  return text.length > max ? text.slice(0,max-3)+'...' : text;
+}
+module.exports = { EDIT_ROLES, GUILD_ID, COOKIE_NAME, makeSession, readSession, setSessionCookie, clearSessionCookie, canEditFromRoles, avatarUrl, getBaseUrl, sendJson, truncate };
