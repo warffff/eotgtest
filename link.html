@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Привязка Discord — Edge of the Force</title>
+<link href="assets/favicon.png" rel="icon" type="image/png">
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#030712;--panel:rgba(7,17,32,.86);--line:rgba(125,211,252,.25);--line2:rgba(125,211,252,.42);--text:#eef8ff;--muted:#91a7ba;--blue:#7dd3fc;--deep:#0ea5e9}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;overflow:hidden;background:radial-gradient(circle at 50% 10%,#0a1730 0%,#030712 48%,#01030a 100%);color:var(--text);font-family:Manrope,Inter,system-ui,sans-serif;display:grid;place-items:center}
+body:before{content:"";position:fixed;inset:-20%;background:radial-gradient(circle at 20% 30%,rgba(56,189,248,.14),transparent 30%),radial-gradient(circle at 80% 15%,rgba(14,165,233,.12),transparent 26%);filter:blur(18px);animation:move 18s ease-in-out infinite alternate;pointer-events:none}
+@keyframes move{from{transform:translate3d(-1%,0,0) scale(1)}to{transform:translate3d(2%,1%,0) scale(1.04)}}
+.card{position:relative;width:min(540px,calc(100vw - 32px));background:linear-gradient(180deg,rgba(9,23,42,.92),rgba(5,13,27,.88));border:1px solid var(--line);border-radius:26px;padding:30px;box-shadow:0 28px 90px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.06)}
+.badge{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:rgba(14,165,233,.12);color:var(--blue);padding:8px 12px;border-radius:999px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+h1{margin:18px 0 10px;font-size:30px;line-height:1.12}
+p{margin:0 0 18px;color:var(--muted);line-height:1.6}
+.code{display:grid;gap:8px;margin:18px 0}
+label{font-size:13px;color:#b8c7d6;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+input{width:100%;padding:17px 18px;border-radius:16px;border:1px solid rgba(125,211,252,.30);background:rgba(2,8,18,.82);color:#fff;font-size:26px;font-weight:900;letter-spacing:.12em;text-align:center;text-transform:uppercase;outline:none}
+input:focus{border-color:var(--line2);box-shadow:0 0 0 4px rgba(14,165,233,.12)}
+button,a.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;margin-top:12px;border-radius:16px;border:1px solid rgba(125,211,252,.32);background:linear-gradient(180deg,#0ea5e9,#0284c7);color:#fff;text-decoration:none;font-weight:900;cursor:pointer;box-shadow:0 12px 24px rgba(14,165,233,.18)}
+button.secondary,a.secondary{background:rgba(125,211,252,.08);color:#dff6ff}
+.msg{margin-top:15px;padding:14px;border-radius:16px;border:1px solid rgba(125,211,252,.16);background:rgba(2,8,18,.55);color:#d8f3ff;white-space:pre-wrap;min-height:50px}
+.ok{border-color:rgba(74,222,128,.28);color:#dcfce7}
+.err{border-color:rgba(248,113,113,.28);color:#fee2e2}
+.small{margin-top:12px;font-size:13px;color:#7890a4;text-align:center}
+</style>
+</head>
+<body>
+<main class="card">
+  <span class="badge">Edge of the Force</span>
+  <h1>Привязка Discord к аккаунту</h1>
+  <p>Введи код из игры или открой эту страницу по ссылке, которую сервер выдал после команды <b>/link</b>. После авторизации Discord привязка сохранится до команды <b>/unlink</b>.</p>
+
+  <div class="code">
+    <label for="code">Код из игры</label>
+    <input id="code" autocomplete="one-time-code" placeholder="683513">
+  </div>
+
+  <button id="confirm">Подтвердить привязку</button>
+  <a class="btn secondary" id="login" href="/api/auth/login">Авторизоваться через Discord</a>
+  <div class="msg" id="msg">Ожидание кода...</div>
+  <div class="small">После успешной привязки Discord-ник появится в HUD на сервере.</div>
+</main>
+<script>
+const params = new URLSearchParams(location.search);
+const codeInput = document.getElementById('code');
+const msg = document.getElementById('msg');
+const login = document.getElementById('login');
+
+function cleanCode(value){
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24);
+}
+function setMsg(text, cls){
+  msg.className = 'msg' + (cls ? ' ' + cls : '');
+  msg.textContent = text;
+}
+function updateLogin(){
+  const code = cleanCode(codeInput.value);
+  const ret = '/link.html' + (code ? '?code=' + encodeURIComponent(code) : '');
+  login.href = '/api/auth/login?return=' + encodeURIComponent(ret);
+}
+async function confirmCode(){
+  const code = cleanCode(codeInput.value);
+  codeInput.value = code;
+
+  if (!code) {
+    setMsg('Введи код, который сервер показал после /link.', 'err');
+    updateLogin();
+    return;
+  }
+
+  updateLogin();
+  setMsg('Проверяю Discord-авторизацию и код...', '');
+
+  let data = null;
+  let status = 0;
+  try {
+    const r = await fetch('/api/link/confirm', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code})
+    });
+    status = r.status;
+    data = await r.json();
+  } catch (_) {
+    setMsg('Ошибка связи с сайтом. Попробуй ещё раз.', 'err');
+    return;
+  }
+
+  if (status === 401 || data.error === 'NOT_AUTHORIZED') {
+    setMsg('Сначала авторизуйся через Discord, потом код подтвердится на этой же странице.', 'err');
+    return;
+  }
+
+  if (!data.ok) {
+    setMsg(data.message || data.error || 'Не удалось привязать аккаунт.', 'err');
+    return;
+  }
+
+  setMsg(data.message || 'Аккаунт успешно привязан.', 'ok');
+}
+
+codeInput.value = cleanCode(params.get('code') || '');
+codeInput.addEventListener('input', updateLogin);
+document.getElementById('confirm').addEventListener('click', confirmCode);
+updateLogin();
+
+if (codeInput.value) {
+  confirmCode();
+}
+</script>
+</body>
+</html>
