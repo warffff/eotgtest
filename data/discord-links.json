@@ -1,15 +1,16 @@
 {
   "version": 1,
-  "pending": {
-    "814333": {
-      "code": "814333",
+  "pending": {},
+  "links": {
+    "76561198853890221": {
       "steamid64": "76561198853890221",
       "steamid": "STEAM_0:1:446812246",
       "player_name": "warf",
-      "server_name": "Edge of the Force",
-      "created_at": 1781115508,
-      "expires_at": 1781116407
+      "discord_id": "578653190791102478",
+      "discord_name": "warf",
+      "discord_username": "warf1",
+      "discord_avatar": "https://cdn.discordapp.com/avatars/578653190791102478/56c27a8e9344b2100162461c99ffaa61.png?size=128",
+      "linked_at": 1781115532
     }
-  },
-  "links": {}
+  }
 }
